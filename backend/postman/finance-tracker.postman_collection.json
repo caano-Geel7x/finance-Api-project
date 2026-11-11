@@ -1,0 +1,632 @@
+{
+  "info": {
+    "_postman_id": "d98dbf64-4124-4a56-b801-ec91d30eac11",
+    "name": "Personal Finance Tracker API - Full Endpoint Test",
+    "description": "Ordered end-to-end checks for every API route. Requires a running API with MongoDB. Cloudinary is required for a successful image upload. Uses disposable test email addresses.",
+    "schema": "https://schema.getpostman.com/json/collection/v2.1.0/collection.json"
+  },
+  "variable": [
+    { "key": "baseUrl", "value": "http://localhost:3000" },
+    { "key": "tokenA", "value": "" },
+    { "key": "tokenB", "value": "" },
+    { "key": "adminToken", "value": "" },
+    { "key": "emailA", "value": "" },
+    { "key": "emailB", "value": "" },
+    { "key": "categoryName", "value": "" },
+    { "key": "password", "value": "Test-Password-Only-1234" },
+    { "key": "expenseCategoryId", "value": "" },
+    { "key": "incomeCategoryId", "value": "" },
+    { "key": "customCategoryId", "value": "" },
+    { "key": "transactionId", "value": "" }
+  ],
+  "item": [
+    {
+      "name": "1. Public and authentication",
+      "item": [
+        {
+          "name": "Health check",
+          "request": {
+            "method": "GET",
+            "url": "{{baseUrl}}/health"
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('Health returns 200', function () { pm.response.to.have.status(200); });",
+                  "pm.test('Health is ok', function () { pm.expect(pm.response.json().status).to.eql('ok'); });"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "Swagger UI",
+          "request": {
+            "method": "GET",
+            "url": "{{baseUrl}}/docs/"
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('Swagger UI returns 200', function () { pm.response.to.have.status(200); });",
+                  "pm.test('Swagger UI page is served', function () { pm.expect(pm.response.text()).to.include('swagger-ui'); });"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "OpenAPI document",
+          "request": {
+            "method": "GET",
+            "url": "{{baseUrl}}/docs/openapi.json"
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('OpenAPI document returns 200', function () { pm.response.to.have.status(200); });",
+                  "pm.test('Bearer authentication is documented', function () { pm.expect(pm.response.json().components.securitySchemes.bearerAuth.scheme).to.eql('bearer'); });"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "Register User A (creates fresh test account)",
+          "event": [
+            {
+              "listen": "prerequest",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "const stamp = Date.now() + '-' + Math.floor(Math.random() * 100000);",
+                  "pm.collectionVariables.set('emailA', 'finance-a-' + stamp + '@example.test');",
+                  "pm.collectionVariables.set('emailB', 'finance-b-' + stamp + '@example.test');",
+                  "pm.collectionVariables.set('categoryName', 'Test-' + stamp);"
+                ]
+              }
+            },
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('Registration returns 201', function () { pm.response.to.have.status(201); });",
+                  "const data = pm.response.json();",
+                  "pm.collectionVariables.set('tokenA', data.accessToken);",
+                  "pm.test('New account is a regular user and has a token', function () { pm.expect(data.user.role).to.eql('user'); pm.expect(data.accessToken).to.be.a('string'); });"
+                ]
+              }
+            }
+          ],
+          "request": {
+            "method": "POST",
+            "header": [{ "key": "Content-Type", "value": "application/json" }],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"name\": \"Test User A\",\n  \"email\": \"{{emailA}}\",\n  \"password\": \"{{password}}\"\n}",
+              "options": { "raw": { "language": "json" } }
+            },
+            "url": "{{baseUrl}}/auth/register"
+          }
+        },
+        {
+          "name": "Duplicate registration returns 409",
+          "request": {
+            "method": "POST",
+            "header": [{ "key": "Content-Type", "value": "application/json" }],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"name\": \"Test User A\",\n  \"email\": \"{{emailA}}\",\n  \"password\": \"{{password}}\"\n}",
+              "options": { "raw": { "language": "json" } }
+            },
+            "url": "{{baseUrl}}/auth/register"
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": ["pm.test('Duplicate email returns 409', function () { pm.response.to.have.status(409); });"]
+              }
+            }
+          ]
+        },
+        {
+          "name": "Invalid credentials return 401",
+          "request": {
+            "method": "POST",
+            "header": [{ "key": "Content-Type", "value": "application/json" }],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"email\": \"{{emailA}}\",\n  \"password\": \"Definitely-Wrong-Password\"\n}",
+              "options": { "raw": { "language": "json" } }
+            },
+            "url": "{{baseUrl}}/auth/login"
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": ["pm.test('Invalid credentials return 401', function () { pm.response.to.have.status(401); });"]
+              }
+            }
+          ]
+        },
+        {
+          "name": "Login User A",
+          "request": {
+            "method": "POST",
+            "header": [{ "key": "Content-Type", "value": "application/json" }],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"email\": \"{{emailA}}\",\n  \"password\": \"{{password}}\"\n}",
+              "options": { "raw": { "language": "json" } }
+            },
+            "url": "{{baseUrl}}/auth/login"
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('Login returns 200', function () { pm.response.to.have.status(200); });",
+                  "pm.collectionVariables.set('tokenA', pm.response.json().accessToken);"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "Profile without token returns 401",
+          "request": {
+            "auth": { "type": "noauth" },
+            "method": "GET",
+            "url": "{{baseUrl}}/auth/profile"
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": ["pm.test('Missing token returns 401', function () { pm.response.to.have.status(401); });"]
+              }
+            }
+          ]
+        },
+        {
+          "name": "Profile with invalid token returns 401",
+          "request": {
+            "auth": { "type": "bearer", "bearer": [{ "key": "token", "value": "invalid-test-token" }] },
+            "method": "GET",
+            "url": "{{baseUrl}}/auth/profile"
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": ["pm.test('Invalid token returns 401', function () { pm.response.to.have.status(401); });"]
+              }
+            }
+          ]
+        },
+        {
+          "name": "Get authenticated profile",
+          "request": {
+            "auth": { "type": "bearer", "bearer": [{ "key": "token", "value": "{{tokenA}}" }] },
+            "method": "GET",
+            "url": "{{baseUrl}}/auth/profile"
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('Profile returns 200', function () { pm.response.to.have.status(200); });",
+                  "pm.test('Profile does not expose password fields', function () { const body = JSON.stringify(pm.response.json()); pm.expect(body).not.to.include('passwordHash'); pm.expect(body).not.to.include('password'); });"
+                ]
+              }
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "name": "2. Categories",
+      "item": [
+        {
+          "name": "List categories and save test category IDs",
+          "request": {
+            "auth": { "type": "bearer", "bearer": [{ "key": "token", "value": "{{tokenA}}" }] },
+            "method": "GET",
+            "url": "{{baseUrl}}/categories"
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('Categories return 200', function () { pm.response.to.have.status(200); });",
+                  "const categories = pm.response.json().categories;",
+                  "const expense = categories.find((category) => category.type === 'expense');",
+                  "const income = categories.find((category) => category.type === 'income');",
+                  "pm.test('Predefined income and expense categories exist', function () { pm.expect(expense).to.exist; pm.expect(income).to.exist; });",
+                  "if (expense) pm.collectionVariables.set('expenseCategoryId', expense.id);",
+                  "if (income) pm.collectionVariables.set('incomeCategoryId', income.id);"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "Create custom category",
+          "request": {
+            "auth": { "type": "bearer", "bearer": [{ "key": "token", "value": "{{tokenA}}" }] },
+            "method": "POST",
+            "header": [{ "key": "Content-Type", "value": "application/json" }],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"name\": \"{{categoryName}}\",\n  \"type\": \"expense\"\n}",
+              "options": { "raw": { "language": "json" } }
+            },
+            "url": "{{baseUrl}}/categories"
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('Custom category returns 201', function () { pm.response.to.have.status(201); });",
+                  "if (pm.response.code === 201) pm.collectionVariables.set('customCategoryId', pm.response.json().category.id);"
+                ]
+              }
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "name": "3. Transactions",
+      "item": [
+        {
+          "name": "Create transaction",
+          "request": {
+            "auth": { "type": "bearer", "bearer": [{ "key": "token", "value": "{{tokenA}}" }] },
+            "method": "POST",
+            "header": [{ "key": "Content-Type", "value": "application/json" }],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"title\": \"Postman test groceries\",\n  \"amount\": \"42.50\",\n  \"type\": \"expense\",\n  \"categoryId\": \"{{expenseCategoryId}}\",\n  \"date\": \"2026-11-06T12:00:00Z\"\n}",
+              "options": { "raw": { "language": "json" } }
+            },
+            "url": "{{baseUrl}}/transactions"
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('Transaction returns 201', function () { pm.response.to.have.status(201); });",
+                  "if (pm.response.code === 201) pm.collectionVariables.set('transactionId', pm.response.json().transaction.id);"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "Invalid transaction amount returns 400",
+          "request": {
+            "auth": { "type": "bearer", "bearer": [{ "key": "token", "value": "{{tokenA}}" }] },
+            "method": "POST",
+            "header": [{ "key": "Content-Type", "value": "application/json" }],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"title\": \"Invalid amount test\",\n  \"amount\": \"4.999\",\n  \"type\": \"expense\",\n  \"categoryId\": \"{{expenseCategoryId}}\",\n  \"date\": \"2026-11-06T12:00:00Z\"\n}",
+              "options": { "raw": { "language": "json" } }
+            },
+            "url": "{{baseUrl}}/transactions"
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": ["pm.test('Invalid amount returns 400', function () { pm.response.to.have.status(400); });"]
+              }
+            }
+          ]
+        },
+        {
+          "name": "List transactions",
+          "request": {
+            "auth": { "type": "bearer", "bearer": [{ "key": "token", "value": "{{tokenA}}" }] },
+            "method": "GET",
+            "url": "{{baseUrl}}/transactions?page=1&limit=20&type=expense"
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('Transaction list returns 200', function () { pm.response.to.have.status(200); });",
+                  "pm.test('Created transaction appears in list', function () { pm.expect(pm.response.json().transactions.some((item) => item.id === pm.collectionVariables.get('transactionId'))).to.eql(true); });"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "Monthly summary",
+          "request": {
+            "auth": { "type": "bearer", "bearer": [{ "key": "token", "value": "{{tokenA}}" }] },
+            "method": "GET",
+            "url": "{{baseUrl}}/transactions/monthly-summary?year=2026&month=11"
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('Monthly summary returns 200', function () { pm.response.to.have.status(200); });",
+                  "pm.test('Summary returns decimal strings', function () { const summary = pm.response.json().summary; pm.expect(summary.income).to.be.a('string'); pm.expect(summary.expense).to.be.a('string'); pm.expect(summary.balance).to.be.a('string'); });"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "Update owned transaction",
+          "request": {
+            "auth": { "type": "bearer", "bearer": [{ "key": "token", "value": "{{tokenA}}" }] },
+            "method": "PUT",
+            "header": [{ "key": "Content-Type", "value": "application/json" }],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"title\": \"Updated Postman groceries\"\n}",
+              "options": { "raw": { "language": "json" } }
+            },
+            "url": "{{baseUrl}}/transactions/{{transactionId}}"
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('Owner update returns 200', function () { pm.response.to.have.status(200); });",
+                  "if (pm.response.code === 200) pm.test('Title was updated', function () { pm.expect(pm.response.json().transaction.title).to.eql('Updated Postman groceries'); });"
+                ]
+              }
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "name": "4. Cross-user and admin access control",
+      "item": [
+        {
+          "name": "Register User B",
+          "request": {
+            "method": "POST",
+            "header": [{ "key": "Content-Type", "value": "application/json" }],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"name\": \"Test User B\",\n  \"email\": \"{{emailB}}\",\n  \"password\": \"{{password}}\"\n}",
+              "options": { "raw": { "language": "json" } }
+            },
+            "url": "{{baseUrl}}/auth/register"
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('Second user registration returns 201', function () { pm.response.to.have.status(201); });",
+                  "if (pm.response.code === 201) pm.collectionVariables.set('tokenB', pm.response.json().accessToken);"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "User B cannot update User A transaction",
+          "request": {
+            "auth": { "type": "bearer", "bearer": [{ "key": "token", "value": "{{tokenB}}" }] },
+            "method": "PUT",
+            "header": [{ "key": "Content-Type", "value": "application/json" }],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"title\": \"Unauthorized change\"\n}",
+              "options": { "raw": { "language": "json" } }
+            },
+            "url": "{{baseUrl}}/transactions/{{transactionId}}"
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": ["pm.test('Cross-user update is concealed as 404', function () { pm.response.to.have.status(404); });"]
+              }
+            }
+          ]
+        },
+        {
+          "name": "User B cannot delete User A transaction",
+          "request": {
+            "auth": { "type": "bearer", "bearer": [{ "key": "token", "value": "{{tokenB}}" }] },
+            "method": "DELETE",
+            "url": "{{baseUrl}}/transactions/{{transactionId}}"
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": ["pm.test('Cross-user delete is concealed as 404', function () { pm.response.to.have.status(404); });"]
+              }
+            }
+          ]
+        },
+        {
+          "name": "Regular user cannot access admin overview",
+          "request": {
+            "auth": { "type": "bearer", "bearer": [{ "key": "token", "value": "{{tokenB}}" }] },
+            "method": "GET",
+            "url": "{{baseUrl}}/admin/overview"
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": ["pm.test('Regular user receives 403', function () { pm.response.to.have.status(403); });"]
+              }
+            }
+          ]
+        },
+        {
+          "name": "Admin overview (requires adminToken configured)",
+          "request": {
+            "auth": { "type": "bearer", "bearer": [{ "key": "token", "value": "{{adminToken}}" }] },
+            "method": "GET",
+            "url": "{{baseUrl}}/admin/overview",
+            "description": "Optional positive admin test. Set adminToken to a valid token for an account whose role was assigned through trusted database administration. Do not expose a public role-change route."
+          },
+          "event": [
+            {
+              "listen": "prerequest",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "if (!pm.collectionVariables.get('adminToken')) {",
+                  "  console.log('Skipping optional admin success test: set adminToken to a trusted admin token to run it.');",
+                  "  pm.execution.skipRequest();",
+                  "}"
+                ]
+              }
+            },
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": ["pm.test('Admin overview returns 200', function () { pm.response.to.have.status(200); });"]
+              }
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "name": "5. Uploads and cleanup",
+      "item": [
+        {
+          "name": "Upload missing image returns 400",
+          "request": {
+            "auth": { "type": "bearer", "bearer": [{ "key": "token", "value": "{{tokenA}}" }] },
+            "method": "POST",
+            "body": {
+              "mode": "formdata",
+              "formdata": [{ "key": "image", "type": "file", "src": null }]
+            },
+            "url": "{{baseUrl}}/upload/profile-picture",
+            "description": "Negative test: leave image unselected; the API should report that a file is required."
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": ["pm.test('Missing image returns 400', function () { pm.response.to.have.status(400); });"]
+              }
+            }
+          ]
+        },
+        {
+          "name": "Upload invalid text file (select a .txt file)",
+          "request": {
+            "auth": { "type": "bearer", "bearer": [{ "key": "token", "value": "{{tokenA}}" }] },
+            "method": "POST",
+            "body": {
+              "mode": "formdata",
+              "formdata": [{ "key": "image", "type": "file", "src": null }]
+            },
+            "url": "{{baseUrl}}/upload/profile-picture",
+            "description": "Select a .txt file in Postman. Expected: 415 because its claimed MIME type is not an allowed image type."
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": ["pm.test('Unsupported text file returns 415', function () { pm.response.to.have.status(415); });"]
+              }
+            }
+          ]
+        },
+        {
+          "name": "Upload valid image (select JPEG, PNG, or WebP under 5 MB)",
+          "request": {
+            "auth": { "type": "bearer", "bearer": [{ "key": "token", "value": "{{tokenA}}" }] },
+            "method": "POST",
+            "body": {
+              "mode": "formdata",
+              "formdata": [{ "key": "image", "type": "file", "src": null }]
+            },
+            "url": "{{baseUrl}}/upload/profile-picture",
+            "description": "Select a genuine JPEG/PNG/WebP under 5 MB. Requires Cloudinary credentials. This manual test expects 200."
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('Valid image upload returns 200', function () { pm.response.to.have.status(200); });",
+                  "if (pm.response.code === 200) pm.test('Response contains secure profile URL', function () { pm.expect(pm.response.json().profilePictureUrl).to.match(/^https:\\/\\//); });"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "User A deletes own transaction",
+          "request": {
+            "auth": { "type": "bearer", "bearer": [{ "key": "token", "value": "{{tokenA}}" }] },
+            "method": "DELETE",
+            "url": "{{baseUrl}}/transactions/{{transactionId}}"
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": ["pm.test('Owner delete returns 204', function () { pm.response.to.have.status(204); });"]
+              }
+            }
+          ]
+        }
+      ]
+    }
+  ]
+}
